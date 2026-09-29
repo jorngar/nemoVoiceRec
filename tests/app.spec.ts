@@ -49,13 +49,11 @@ test("import, play, rename, favorite, delete, restore and persistence", async ({
   page,
 }) => {
   await page.goto("/");
-  await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "Interview.wav",
-      mimeType: "audio/wav",
-      buffer: wav(),
-    });
+  await page.locator("input[type=file]").setInputFiles({
+    name: "Interview.wav",
+    mimeType: "audio/wav",
+    buffer: wav(),
+  });
   await expect(
     page.getByRole("heading", { name: "Interview", exact: true }),
   ).toBeVisible();
@@ -116,4 +114,38 @@ test("records microphone input, pauses, resumes, saves and plays", async ({
   await expect(
     page.getByRole("button", { name: "Pause playback" }),
   ).toBeVisible();
+});
+test("copy transcript and right-click menu", async ({ page }) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Explore a sample transcript" })
+    .click();
+  await page
+    .getByRole("button", { name: "Copy transcript", exact: true })
+    .click();
+  await expect(page.getByText("Transcript copied")).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("Speakers:");
+  expect(copied).toMatch(/\[\d\d:\d\d\] \S/);
+  await page.getByRole("button", { name: /Close sample/ }).click();
+  await page
+    .locator("input[type=file]")
+    .setInputFiles({
+      name: "Standup.wav",
+      mimeType: "audio/wav",
+      buffer: wav(),
+    });
+  await expect(
+    page.getByRole("heading", { name: "Standup", exact: true }),
+  ).toBeVisible();
+  await page.locator(".recording-item").first().click({ button: "right" });
+  // Not transcribed yet: no transcript actions, but the general ones are there.
+  await expect(
+    page.getByRole("menuitem", { name: "Copy transcript" }),
+  ).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Add to favorites" }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(
+    page.locator(".recording-item").first().locator("svg"),
+  ).toHaveCount(1);
 });

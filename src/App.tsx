@@ -34,38 +34,22 @@ import {
   ShieldCheck,
   Sparkles,
   Copy,
+  FileDown,
 } from "lucide-react";
-import type { Progress, Recording, Settings, Turn } from "./types";
+import type { MenuAction, Progress, Recording, Settings, Turn } from "./types";
 import { api } from "./storage";
 import { prepareAudio, clock } from "./audio";
 import { demo } from "./demo";
-const colors = [
-  "#bd603c",
-  "#438978",
-  "#687ec2",
-  "#a86598",
-  "#ad872e",
-  "#398da7",
-  "#887150",
-  "#7777a5",
-];
-const speakerColor = (speaker: string) =>
-  speaker === "overlap"
-    ? "#8a7f72"
-    : speaker === "unknown"
-      ? "#85858b"
-      : colors[(Number(speaker.replace("speaker_", "")) - 1) % 8] || colors[0];
+import {
+  fileName,
+  languageName,
+  speakerColor,
+  transcriptDocx,
+  transcriptText,
+} from "./transcript";
 // Electron prefixes errors thrown in the main process; show only the message itself.
 const readableError = (message: string) =>
   message.replace(/(Error invoking remote method '[^']+': )?(Error: )+/g, "");
-const languageNames = new Intl.DisplayNames(undefined, { type: "language" });
-const languageName = (code: string) => {
-  try {
-    return languageNames.of(code) || code;
-  } catch {
-    return code;
-  }
-};
 const stamp = (date: string) =>
   new Date(date).toLocaleDateString(undefined, {
     month: "short",
@@ -163,16 +147,22 @@ const RecordingList = memo(function RecordingList({
   recordings,
   activeId,
   onChoose,
+  onMenu,
 }: {
   recordings: Recording[];
   activeId?: string;
   onChoose: (id: string) => void;
+  onMenu: (recording: Recording, x: number, y: number) => void;
 }) {
   return recordings.map((r) => (
     <button
       className={`recording-item ${activeId === r.id ? "active" : ""}`}
       key={r.id}
       onClick={() => onChoose(r.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(r, e.clientX, e.clientY);
+      }}
     >
       <span className="recording-title">
         {r.title}
@@ -419,6 +409,77 @@ function Elapsed({ since }: { since: number }) {
   }, []);
   return <>{clock((now - since) / 1000)} elapsed · </>;
 }
+// In-page right-click menu for the browser version (the desktop app uses a native menu).
+function RecordingMenu({
+  recording,
+  x,
+  y,
+  onAction,
+  onClose,
+}: {
+  recording: Recording;
+  x: number;
+  y: number;
+  onAction: (action: MenuAction) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key !== "Escape") return;
+      onClose();
+    };
+    window.addEventListener("keydown", close);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("keydown", close);
+      window.removeEventListener("resize", close);
+    };
+  }, [onClose]);
+  const ready = recording.transcribed && recording.turns.length > 0;
+  const items: [MenuAction, string][] = [
+    ...(ready
+      ? ([
+          ["copy-transcript", "Copy transcript"],
+          ["download-docx", "Download transcript as Word"],
+        ] as [MenuAction, string][])
+      : []),
+    ...(recording.summary
+      ? ([["copy-summary", "Copy summary"]] as [MenuAction, string][])
+      : []),
+    [
+      "favorite",
+      recording.favorite ? "Remove from favorites" : "Add to favorites",
+    ],
+    ["export-audio", "Export audio"],
+    ["delete", recording.deleted ? "Restore" : "Delete"],
+  ];
+  return (
+    <div
+      className="context-backdrop"
+      onClick={onClose}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+    >
+      <div
+        className="context-menu"
+        role="menu"
+        style={{
+          left: Math.min(x, window.innerWidth - 230),
+          top: Math.min(y, window.innerHeight - items.length * 32 - 16),
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {items.map(([action, label]) => (
+          <button key={action} role="menuitem" onClick={() => onAction(action)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 // Text appears piece by piece while transcribing; speakers are attached at the end.
 function TranscribingView({
   progress,
@@ -500,7 +561,12 @@ export default function App() {
     [transcriptSearch, setTranscriptSearch] = useState(""),
     [exportOpen, setExportOpen] = useState(false),
     [renaming, setRenaming] = useState(false),
-    [summarizing, setSummarizing] = useState<string | null>(null);
+    [summarizing, setSummarizing] = useState<string | null>(null),
+    [menu, setMenu] = useState<{
+      recording: Recording;
+      x: number;
+      y: number;
+    } | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null),
     fileRef = useRef<HTMLInputElement>(null),
     media = useRef<MediaRecorder | null>(null),
@@ -607,8 +673,13 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [notice]);
   async function patch(changes: Partial<Recording>) {
-    if (!active || active.demo) return;
-    const previous = active;
+    if (active) await patchRecording(active, changes);
+  }
+  async function patchRecording(
+    previous: Recording,
+    changes: Partial<Recording>,
+  ) {
+    if (previous.demo) return;
     setItems((prev) =>
       prev.map((r) => (r.id === previous.id ? { ...r, ...changes } : r)),
     );
@@ -821,34 +892,70 @@ export default function App() {
     if (api.languages && !languages.length)
       void api.languages().then(setLanguages);
   }, [tab]);
-  async function exportRecording(kind: string) {
-    if (!active) return;
+  async function exportRecording(kind: string, target = active) {
+    if (!target) return;
     setExportOpen(false);
-    const text =
-      kind === "md"
-        ? `# ${active.title}\n\n${active.summary?.text || ""}\n`
-        : kind === "json"
-          ? JSON.stringify(
-              {
-                title: active.title,
-                speakers: active.speakers,
-                turns: active.turns,
-              },
-              null,
-              2,
-            )
-          : active.turns
-              .map(
-                (t) =>
-                  `[${clock(t.start)}] ${active.speakers[t.speaker] || t.speaker}\n${t.text}`,
-              )
-              .join("\n\n");
     try {
-      if (await api.export(active.id, kind, text)) setNotice("Export saved");
+      const data =
+        kind === "docx"
+          ? await transcriptDocx(target)
+          : kind === "md"
+            ? `# ${target.title}\n\n${target.summary?.text || ""}\n`
+            : kind === "json"
+              ? JSON.stringify(
+                  {
+                    title: target.title,
+                    speakers: target.speakers,
+                    turns: target.turns,
+                  },
+                  null,
+                  2,
+                )
+              : transcriptText(target);
+      if (await api.export(target.id, kind, data))
+        setNotice(kind === "docx" ? "Word document saved" : "Export saved");
     } catch (e) {
-      setError(String(e));
+      setError(`Could not export: ${e instanceof Error ? e.message : e}`);
     }
   }
+  async function copyText(text: string, message: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice(message);
+    } catch (e) {
+      setError(`Could not copy: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  function runMenuAction(target: Recording, action: MenuAction) {
+    setMenu(null);
+    if (action === "copy-transcript")
+      void copyText(transcriptText(target), "Transcript copied");
+    else if (action === "download-docx") void exportRecording("docx", target);
+    else if (action === "copy-summary")
+      void copyText(target.summary?.text || "", "Summary copied");
+    else if (action === "favorite")
+      void patchRecording(target, { favorite: !target.favorite });
+    else if (action === "export-audio") void exportRecording("wav", target);
+    else if (action === "delete")
+      void patchRecording(target, { deleted: !target.deleted });
+  }
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const runMenuActionRef = useRef(runMenuAction);
+  runMenuActionRef.current = runMenuAction;
+  // Desktop: native menu, whose choice comes back as an event. Browser: an in-page menu.
+  const openMenu = useCallback((target: Recording, x: number, y: number) => {
+    if (api.showMenu) void api.showMenu(target.id);
+    else setMenu({ recording: target, x, y });
+  }, []);
+  useEffect(
+    () =>
+      api.onMenuAction?.(({ id, action }) => {
+        const target = itemsRef.current.find((r) => r.id === id);
+        if (target) runMenuActionRef.current(target, action);
+      }),
+    [],
+  );
   const speakers = useMemo(
     () =>
       active
@@ -940,6 +1047,7 @@ export default function App() {
               recordings={filtered}
               activeId={active?.id}
               onChoose={choose}
+              onMenu={openMenu}
             />
             {!filtered.length && (
               <div className="library-empty">
@@ -1163,7 +1271,9 @@ export default function App() {
                       <div className="export-menu">
                         {[
                           "wav",
-                          ...(active.transcribed ? ["txt", "json"] : []),
+                          ...(active.transcribed
+                            ? ["docx", "txt", "json"]
+                            : []),
                           ...(active.summary ? ["md"] : []),
                         ].map((kind) => (
                           <button
@@ -1172,11 +1282,13 @@ export default function App() {
                           >
                             {kind === "wav"
                               ? "Audio (.wav)"
-                              : kind === "txt"
-                                ? "Transcript (.txt)"
-                                : kind === "json"
-                                  ? "Transcript (.json)"
-                                  : "Summary (.md)"}
+                              : kind === "docx"
+                                ? "Transcript (Word)"
+                                : kind === "txt"
+                                  ? "Transcript (.txt)"
+                                  : kind === "json"
+                                    ? "Transcript (.json)"
+                                    : "Summary (.md)"}
                           </button>
                         ))}
                       </div>
@@ -1320,6 +1432,29 @@ export default function App() {
                     Summary
                   </button>
                 </div>
+                {active.transcribed && active.turns.length > 0 && (
+                  <div className="transcript-actions">
+                    <button
+                      className="icon-button"
+                      aria-label="Copy transcript"
+                      title="Copy transcript"
+                      onClick={() =>
+                        copyText(transcriptText(active), "Transcript copied")
+                      }
+                    >
+                      <Copy size={16} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      aria-label="Download transcript as Word"
+                      title="Download as Word"
+                      disabled={active.demo}
+                      onClick={() => exportRecording("docx")}
+                    >
+                      <FileDown size={16} />
+                    </button>
+                  </div>
+                )}
                 {active.transcribed && (
                   <label className="transcript-search">
                     <Search size={15} />
@@ -1534,6 +1669,13 @@ export default function App() {
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}
       />
+      {menu && (
+        <RecordingMenu
+          {...menu}
+          onAction={(action) => runMenuAction(menu.recording, action)}
+          onClose={() => setMenu(null)}
+        />
+      )}
       {notice && (
         <div className="toast" role="status">
           <Check size={15} />

@@ -70,7 +70,9 @@ Build-machine settings such as Electron download caches go in an untracked `.env
 - Live transcription progress with text appearing piece by piece, cancel and resume
 - Click a transcript passage to seek to its timestamp
 - Speaker-aware summaries and translation through your local Hermes agent
-- Export transcripts as text or JSON, and summaries as Markdown
+- Copy a full transcript to the clipboard, or download it as a Word document with speaker names in their colors
+- Right-click a recording for copy, Word download, favorites, audio export and delete
+- Export transcripts as Word, text or JSON, and summaries as Markdown
 - Explicit *Overlapping voices* and *Unassigned* labels instead of guessed attribution
 
 The sample transcript is clearly labeled illustrative and contains no playable recording. Real transcripts are only created by the speech engine.
@@ -82,7 +84,7 @@ The sample transcript is clearly labeled illustrative and contains no playable r
 3. With **Automatic** language (the default), 45 s of speech is run through Nemotron 3.5 ASR with `--language auto`; the detected locale is then passed explicitly to every piece. A language can also be chosen in Settings.
 4. Each piece is transcribed with `nemo-speech transcribe <piece> --format json`: Parakeet TDT v3 for its 25 European languages, Nemotron 3.5 ASR (`--language <locale>`) for everything else, including Vietnamese. Text appears in the app as each piece finishes; finished pieces are cached under `<data>/cache` so a cancelled run resumes.
 5. `nemo-speech diarize <audio> --model Nemotron-3-Diarization.q8_0.gguf --format rttm` runs once over the whole recording in streaming mode (up to 8 speakers, consistent labels across the file).
-6. Word midpoints are aligned to speaker intervals. Multiple active speakers become **Overlapping voices**; unmatched words become **Unassigned**.
+6. Word midpoints are aligned to speaker intervals. Multiple active speakers become **Overlapping voices**. A word just outside a segment edge goes to the speaker it overlaps most, or the nearest one within 0.5 s; words further from any speech become **Unassigned**.
 
 All engine runs use macOS background priority (`taskpolicy -b`) and are paused (SIGSTOP) while macOS reports a *serious* or *critical* thermal state. Measured on this Mac per 5 minutes of audio: Parakeet ~37 s / ~0.95 GB, Nemotron 3.5 ~60–80 s / ~1.9 GB, diarization ~19 s / ~0.27 GB.
 

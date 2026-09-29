@@ -7,14 +7,13 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:5173",
     viewport: { width: 1260, height: 850 },
-    permissions: ["microphone"],
+    channel: "chrome",
+    permissions: ["microphone", "clipboard-read", "clipboard-write"],
     launchOptions: {
       args: [
         "--use-fake-device-for-media-stream",
         "--use-fake-ui-for-media-stream",
       ],
-      executablePath:
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     },
   },
   webServer: {

@@ -47,3 +47,27 @@ test("ignores malformed words and rejects an unsupported engine response", () =>
   );
   assert.throws(() => normalizeTranscript({ text: "Hello" }), /unsupported/);
 });
+test("attaches words at segment edges to the nearest speaker, but not words in real silence", () => {
+  const activity = parseRTTM(
+    "SPEAKER m 1 0.000 2.000 <NA> <NA> speaker_1 <NA> <NA>\nSPEAKER m 1 2.300 2.000 <NA> <NA> speaker_2 <NA> <NA>",
+  );
+  const turns = normalizeTranscript(
+    {
+      words: [
+        { word: "giấy", start: 1.5, end: 1.9 },
+        { word: "phép", start: 1.9, end: 2.2 },
+        { word: "con", start: 2.25, end: 2.33 },
+        { word: "later", start: 6, end: 6.4 },
+      ],
+    },
+    activity,
+  );
+  assert.deepEqual(
+    turns.map((t) => [t.speaker, t.text]),
+    [
+      ["speaker_1", "giấy phép"],
+      ["speaker_2", "con"],
+      ["unknown", "later"],
+    ],
+  );
+});

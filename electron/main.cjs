@@ -280,16 +280,20 @@ app.whenReady().then(async () => {
     },
   });
   const trusted = (contents) => contents === win.webContents;
+  // Microphone (never camera) and writing to the clipboard for the Copy buttons.
+  // Reading the clipboard stays denied.
   session.defaultSession.setPermissionRequestHandler(
     (contents, permission, callback, details) =>
       callback(
         trusted(contents) &&
-          permission === "media" &&
-          !details.mediaTypes?.includes("video"),
+          ((permission === "media" && !details.mediaTypes?.includes("video")) ||
+            permission === "clipboard-sanitized-write"),
       ),
   );
   session.defaultSession.setPermissionCheckHandler(
-    (contents, permission) => trusted(contents) && permission === "media",
+    (contents, permission) =>
+      trusted(contents) &&
+      ["media", "clipboard-sanitized-write"].includes(permission),
   );
   protocol.handle("voices-audio", async (request) => {
     try {
@@ -419,17 +423,61 @@ app.whenReady().then(async () => {
     "recordings:audio",
     async (id) => new Uint8Array(await fs.readFile(file(id, "wav"))),
   );
-  handle("recordings:export", async (id, kind, text) => {
+  handle("recordings:export", async (id, kind, data) => {
     const item = await metadata(id);
-    if (!["wav", "txt", "json", "md"].includes(kind))
-      throw new Error("Invalid export");
+    const formats = {
+      wav: "WAV audio",
+      txt: "Plain text",
+      json: "JSON",
+      md: "Markdown",
+      docx: "Word document",
+    };
+    if (!(kind in formats)) throw new Error("Invalid export");
     const result = await dialog.showSaveDialog(win, {
-      defaultPath: `${item.title.replace(/[/\\:]/g, "-")}.${kind}`,
+      defaultPath: `${item.title.replace(/[/\\:*?"<>|]/g, "-")}.${kind}`,
+      filters: [{ name: formats[kind], extensions: [kind] }],
     });
     if (result.canceled) return false;
     if (kind === "wav") await fs.copyFile(file(id, "wav"), result.filePath);
-    else await fs.writeFile(result.filePath, String(text));
+    else
+      await fs.writeFile(
+        result.filePath,
+        typeof data === "string" ? data : Buffer.from(data),
+      );
     return true;
+  });
+  // Native right-click menu for a recording. The choice is sent back to the window,
+  // which runs the same action as the matching button.
+  handle("recordings:menu", async (id) => {
+    const item = await metadata(id);
+    const act = (action) => () =>
+      win.webContents.send("recordings:menu-action", { id, action });
+    const ready = item.transcribed && item.turns?.length > 0;
+    Menu.buildFromTemplate([
+      ...(ready
+        ? [
+            { label: "Copy Transcript", click: act("copy-transcript") },
+            {
+              label: "Download Transcript as Word…",
+              click: act("download-docx"),
+            },
+            ...(item.summary
+              ? [{ label: "Copy Summary", click: act("copy-summary") }]
+              : []),
+            { type: "separator" },
+          ]
+        : []),
+      {
+        label: item.favorite ? "Remove from Favorites" : "Add to Favorites",
+        click: act("favorite"),
+      },
+      { label: "Export Audio…", click: act("export-audio") },
+      { type: "separator" },
+      {
+        label: item.deleted ? "Restore" : "Delete",
+        click: act("delete"),
+      },
+    ]).popup({ window: win });
   });
   handle("settings:get", settings);
   handle("settings:language", async (language) => {

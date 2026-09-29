@@ -37,16 +37,21 @@ const browser: Bridge = {
   },
   audio: async (id) =>
     new Uint8Array((await store("readonly", (s) => s.get(id))).audio),
-  export: async (id, kind, text) => {
-    const data = kind === "wav" ? await browser.audio(id) : text || "";
+  export: async (id, kind, content) => {
+    const data = kind === "wav" ? await browser.audio(id) : content || "";
+    const types: Record<string, string> = {
+      wav: "audio/wav",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      md: "text/markdown",
+      json: "application/json",
+    };
     const url = URL.createObjectURL(
-      new Blob([data as BlobPart], {
-        type: kind === "wav" ? "audio/wav" : "text/plain",
-      }),
+      new Blob([data as BlobPart], { type: types[kind] || "text/plain" }),
     );
+    const title = (await store("readonly", (s) => s.get(id)))?.title || id;
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${id}.${kind}`;
+    a.download = `${String(title).replace(/[/\\:*?"<>|]/g, "-")}.${kind}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;

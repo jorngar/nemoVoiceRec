@@ -35,6 +35,13 @@ export type Summary = {
   createdAt: string;
   speakers: Record<string, string>;
 };
+export type MenuAction =
+  | "copy-transcript"
+  | "download-docx"
+  | "copy-summary"
+  | "favorite"
+  | "export-audio"
+  | "delete";
 export type Settings = {
   enginePath: string;
   modelPath: string;
@@ -49,7 +56,15 @@ export interface Bridge {
   audio(id: string): Promise<Uint8Array>;
   audioUrl?(id: string): string;
   importFile?(file: File, title: string): Promise<Recording | null>;
-  export(id: string, kind: string, text?: string): Promise<boolean>;
+  export(
+    id: string,
+    kind: string,
+    data?: string | Uint8Array,
+  ): Promise<boolean>;
+  showMenu?(id: string): Promise<void>;
+  onMenuAction?(
+    fn: (choice: { id: string; action: MenuAction }) => void,
+  ): () => void;
   settings(): Promise<Settings>;
   pickSetting(key: string): Promise<Settings | null>;
   setLanguage?(language: string): Promise<Settings>;

@@ -11,8 +11,14 @@ contextBridge.exposeInMainWorld("voices", {
       ? ipcRenderer.invoke("recordings:import", filePath, title)
       : Promise.resolve(null);
   },
-  export: (id, kind, text) =>
-    ipcRenderer.invoke("recordings:export", id, kind, text),
+  export: (id, kind, data) =>
+    ipcRenderer.invoke("recordings:export", id, kind, data),
+  showMenu: (id) => ipcRenderer.invoke("recordings:menu", id),
+  onMenuAction: (fn) => {
+    const handler = (_event, choice) => fn(choice);
+    ipcRenderer.on("recordings:menu-action", handler);
+    return () => ipcRenderer.removeListener("recordings:menu-action", handler);
+  },
   settings: () => ipcRenderer.invoke("settings:get"),
   pickSetting: (key) => ipcRenderer.invoke("settings:pick", key),
   setLanguage: (language) => ipcRenderer.invoke("settings:language", language),
