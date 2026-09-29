@@ -1,0 +1,95 @@
+# ── Dependencies ────────────────────────────────────────────────
+node_modules/
+
+# ── Build output ────────────────────────────────────────────────
+# Vite renderer build and electron-builder packages.
+# Note: build/ is NOT ignored — it holds the app icon electron-builder packages.
+dist/
+dist-web/
+dist-ssr/
+release/
+out/
+*.tsbuildinfo
+.vite/
+
+# ── Local speech runtime, models and caches (multi-GB) ─────────
+# Native engine build, NeMo-Speech.cpp source checkout, GGUF models, model cache,
+# smoke-test data and repro files. Recreate with scripts/setup-runtime.sh.
+.runtime/
+.cache/
+
+# ── Private data: never commit recordings, transcripts or models ─
+# The library lives outside the repo (in the app-data folder); these guard against
+# audio or models copied into the working tree by accident.
+*.wav
+*.m4a
+*.mp3
+*.aac
+*.flac
+*.ogg
+*.opus
+*.webm
+*.aiff
+*.caf
+*.rttm
+*.gguf
+*.safetensors
+*.nemo
+*.onnx
+
+# ── Test output ─────────────────────────────────────────────────
+# Screenshots and traces can show real transcripts.
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+coverage/
+
+# ── Machine-specific settings ───────────────────────────────────
+# Local cache paths etc. Use .env.local (see .env.example) and a user-level .npmrc.
+.npmrc
+
+# ── Secrets and code signing ────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.p8
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+electron-builder.env
+
+# ── Logs and debug files ────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+*.tmp
+*.stage.wav
+*.convert.wav
+
+# ── OS and editor files ─────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# ── Local agent state ───────────────────────────────────────────
+.claude/settings.local.json
+.claude/worktrees/

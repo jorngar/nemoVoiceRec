@@ -1,0 +1,91 @@
+{
+  "name": "voices-recorder",
+  "version": "0.1.0",
+  "description": "A quiet place for every voice.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && electron .\"",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "build:web": "tsc --noEmit && vite build --outDir dist-web",
+    "preview:web": "vite preview --outDir dist-web",
+    "build:mac": "npm run build && python3 scripts/bundle-runtime.py && node scripts/package.mjs --mac",
+    "build:win": "npm run build && node scripts/package.mjs --win",
+    "package": "npm run build:mac",
+    "start": "electron . --production",
+    "test": "node --test tests/*.test.cjs",
+    "test:e2e": "playwright test"
+  },
+  "keywords": [],
+  "author": "Voices",
+  "license": "ISC",
+  "dependencies": {
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "prettier": "^3.9.9",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.1",
+    "wait-on": "^9.4.0"
+  },
+  "productName": "Voices",
+  "private": true,
+  "type": "module",
+  "build": {
+    "appId": "app.voices.recorder",
+    "productName": "Voices",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": "dir",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Voices uses your microphone to record conversations and create speaker-labeled transcripts."
+      },
+      "icon": "build/icon.icns",
+      "extraResources": [
+        {
+          "from": ".runtime/speech-bundle",
+          "to": "speech",
+          "filter": [
+            "bin/**/*",
+            "lib/**/*.dylib",
+            "share/**/*"
+          ]
+        },
+        {
+          "from": ".runtime/models",
+          "to": "models",
+          "filter": [
+            "*.gguf"
+          ]
+        }
+      ]
+    },
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon-1024.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    }
+  }
+}
